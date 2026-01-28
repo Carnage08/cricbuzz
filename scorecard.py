@@ -21,6 +21,7 @@ def init_db():
         match_id TEXT,
         player_id INTEGER,
         player_name TEXT,
+        dismissal TEXT,
         R INTEGER,
         B INTEGER,
         fours INTEGER,
@@ -93,6 +94,15 @@ def scrape_scorecards():
             cursor.execute("DELETE FROM batter_scorecard WHERE match_id=?", (str(match_id),))
             cursor.execute("DELETE FROM bowler_scorecard WHERE match_id=?", (str(match_id),))
             
+            # Extract match name from h1 tag
+            match_name = ""
+            h1_tag = soup.find("h1")
+            if h1_tag:
+                match_name = h1_tag.get_text().strip()
+                # Remove " - Scorecard" suffix if present
+                match_name = match_name.replace(" - Scorecard", "").strip()
+            print(f"   Match Name: {match_name}")
+            
             # The new layout uses "grid" classes.
             # We search for rows directly.
             
@@ -131,6 +141,12 @@ def scrape_scorecards():
                 m = re.search(r"/profiles/(\d+)/", href)
                 p_id = int(m.group(1)) if m else 0
                 
+                # Extract dismissal info (e.g., "c Conway b Henry")
+                dismissal = ""
+                dismissal_el = name_col.find("div", class_=re.compile(r"text-cbTxtSec"))
+                if dismissal_el:
+                    dismissal = dismissal_el.get_text().strip()
+                
                 # Extract numbers
                 # Text usually inside these cols
                 r_val = clean_int(cols[1].get_text())
@@ -140,9 +156,9 @@ def scrape_scorecards():
                 sr = clean_float(cols[5].get_text())
                 
                 cursor.execute("""
-                    INSERT INTO batter_scorecard (match_id, player_id, player_name, R, B, fours, sixes, SR)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                """, (str(match_id), p_id, p_name, r_val, b_val, fours, sixes, sr))
+                    INSERT INTO batter_scorecard (match_id, player_id, player_name, dismissal, R, B, fours, sixes, SR)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (str(match_id), p_id, p_name, dismissal, r_val, b_val, fours, sixes, sr))
                 bat_count += 1
 
             # --- BOWLING ---

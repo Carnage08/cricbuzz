@@ -73,7 +73,7 @@ class SportsMatchScraper:
 
     def get_match_details(self, match_id: str, slug: str, teams: str) -> Dict:
         """Visit detail pages for high-fidelity data"""
-        details = {"winner": None, "venue": None}
+        details = {"winner": None, "venue": None, "match_name": None, "format": "Unknown"}
         team_parts = [t.strip().lower() for t in teams.split(" vs ")]
         
         # 1. Get Venue from Live Score page
@@ -83,6 +83,20 @@ class SportsMatchScraper:
             venue_el = soup.select_one('a[href*="/venues/"]')
             if venue_el:
                 details["venue"] = self.clean_text(venue_el.get_text())
+            
+            # Extract match name from h1 tag
+            h1_tag = soup.find("h1")
+            if h1_tag:
+                match_name = h1_tag.get_text().strip()
+                # Remove common suffixes
+                for suffix in [" - Live Cricket Score", " Live Score", " - Scorecard"]:
+                    match_name = match_name.replace(suffix, "")
+                details["match_name"] = match_name.strip()
+                
+                # Extract format
+                if "T20I" in match_name.upper(): details["format"] = "T20I"
+                elif "ODI" in match_name.upper(): details["format"] = "ODI"
+                elif "TEST" in match_name.upper(): details["format"] = "Test"
             
             winner_el = soup.select_one('#sticky-mcomplete div div')
             if winner_el:
@@ -150,6 +164,8 @@ class SportsMatchScraper:
             matches.append({
                 "match_id": match_id,
                 "teams": teams,
+                "match_name": details["match_name"] or teams,
+                "format": details["format"],
                 "winner": details["winner"],
                 "venue": details["venue"] or "Unknown"
             })
@@ -181,6 +197,8 @@ class SportsMatchRecords:
                 CREATE TABLE IF NOT EXISTS sports_match_records (
                     match_id TEXT PRIMARY KEY,
                     teams TEXT NOT NULL,
+                    match_name TEXT,
+                    format TEXT,
                     winner TEXT,
                     venue TEXT
                 )
@@ -190,19 +208,19 @@ class SportsMatchRecords:
         with self._get_conn() as conn:
             conn.execute("DELETE FROM sports_match_records") # Fresh start
             conn.executemany("""
-                INSERT INTO sports_match_records (match_id, teams, winner, venue)
-                VALUES (:match_id, :teams, :winner, :venue)
+                INSERT INTO sports_match_records (match_id, teams, match_name, format, winner, venue)
+                VALUES (:match_id, :teams, :match_name, :format, :winner, :venue)
             """, matches)
 
     def display(self):
         with self._get_conn() as conn:
             rows = conn.execute("SELECT * FROM sports_match_records").fetchall()
-            print("\n" + "="*90)
-            print(f"{'ID':<10} {'TEAMS':<30} {'WINNER':<20} {'VENUE'}")
-            print("-" * 90)
+            print("\n" + "="*140)
+            print(f"{'ID':<10} {'FORMAT':<10} {'MATCH NAME':<50} {'WINNER':<30} {'VENUE'}")
+            print("-" * 140)
             for r in rows:
-                print(f"{r['match_id']:<10} {r['teams']:<30} {r['winner']:<20} {r['venue']}")
-            print("="*90)
+                print(f"{r['match_id']:<10} {r['format']:<10} {r['match_name']:<50} {r['winner']:<30} {r['venue']}")
+            print("="*140)
 
 
 if __name__ == "__main__":

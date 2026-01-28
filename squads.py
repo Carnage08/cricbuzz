@@ -37,12 +37,18 @@ def init_db():
     cursor.execute("DROP TABLE IF EXISTS players")
     cursor.execute("DROP TABLE IF EXISTS match_squads")
     
-    # Create Players Table
+    # Create Players Table with extended personal info
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS players (
         player_id INTEGER PRIMARY KEY,
         name TEXT NOT NULL,
-        role TEXT
+        role TEXT,
+        birth_date TEXT,
+        birth_place TEXT,
+        nickname TEXT,
+        height TEXT,
+        batting_style TEXT,
+        bowling_style TEXT
     )
     """)
     
@@ -102,6 +108,77 @@ def parse_name_role(full_text):
             
     return name_part, found_role
 
+def fetch_player_profile(player_id, headers):
+    """
+    Fetches a player's profile page and extracts personal info.
+    Returns a dict with: birth_date, birth_place, nickname, height, batting_style, bowling_style
+    """
+    profile_url = f"https://www.cricbuzz.com/profiles/{player_id}/player"
+    
+    profile_info = {
+        "birth_date": None,
+        "birth_place": None,
+        "nickname": None,
+        "height": None,
+        "batting_style": None,
+        "bowling_style": None
+    }
+    
+    try:
+        r = requests.get(profile_url, headers=headers)
+        if r.status_code != 200:
+            print(f"     ⚠️ Could not fetch profile for player {player_id}")
+            return profile_info
+        
+        soup = BeautifulSoup(r.text, "html.parser")
+        
+        # Find all divs that could contain personal info
+        # The structure is typically: label div followed by value div
+        # Labels include: Born, Birth Place, Nickname, Height, Role, Batting Style, Bowling Style
+        
+        # Map of field labels to keys in our dict
+        field_mapping = {
+            "Born": "birth_date",
+            "Birth Place": "birth_place",
+            "Nickname": "nickname",
+            "Height": "height",
+            "Batting Style": "batting_style",
+            "Bowling Style": "bowling_style"
+        }
+        
+        # Find all text on page and look for label patterns
+        all_divs = soup.find_all("div")
+        
+        for div in all_divs:
+            text = div.get_text(strip=True)
+            
+            # Check if this div contains exactly one of our labels
+            for label, key in field_mapping.items():
+                if text == label:
+                    # The value is typically in a sibling div
+                    parent = div.parent
+                    if parent:
+                        children = parent.find_all("div", recursive=False)
+                        for i, child in enumerate(children):
+                            if child.get_text(strip=True) == label and i + 1 < len(children):
+                                value = children[i + 1].get_text(strip=True)
+                                if value and value != label:
+                                    profile_info[key] = value
+                                    break
+                        # Also check if value is in next sibling
+                        if not profile_info[key] and div.next_sibling:
+                            next_el = div.find_next_sibling("div")
+                            if next_el:
+                                value = next_el.get_text(strip=True)
+                                if value and value not in field_mapping.keys():
+                                    profile_info[key] = value
+                    break
+        
+    except Exception as e:
+        print(f"     ⚠️ Error fetching profile for player {player_id}: {e}")
+    
+    return profile_info
+
 def scrape_squads():
     init_db()
     conn = sqlite3.connect(DB_PATH)
@@ -156,12 +233,34 @@ def scrape_squads():
                     if m:
                         p_id = int(m.group(1))
                         
-                        # Insert Player (Update role if missing or changed)
-                        cursor.execute("""
-                            INSERT INTO players (player_id, name, role) 
-                            VALUES (?, ?, ?)
-                            ON CONFLICT(player_id) DO UPDATE SET role=excluded.role, name=excluded.name
-                        """, (p_id, name, role))
+                        # Check if player already exists in database
+                        cursor.execute("SELECT player_id FROM players WHERE player_id = ?", (p_id,))
+                        existing = cursor.fetchone()
+                        
+                        if not existing:
+                            # New player - fetch profile details
+                            print(f"     📥 Fetching profile for {name} (ID: {p_id})...")
+                            profile = fetch_player_profile(p_id, headers)
+                            time.sleep(0.5)  # Rate limiting for profile fetches
+                            
+                            # Insert Player with full profile info
+                            cursor.execute("""
+                                INSERT INTO players (
+                                    player_id, name, role, 
+                                    birth_date, birth_place, nickname, 
+                                    height, batting_style, bowling_style
+                                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                            """, (
+                                p_id, name, role,
+                                profile["birth_date"], profile["birth_place"], profile["nickname"],
+                                profile["height"], profile["batting_style"], profile["bowling_style"]
+                            ))
+                        else:
+                            # Player exists - just update name and role if needed
+                            cursor.execute("""
+                                UPDATE players SET name = ?, role = ?
+                                WHERE player_id = ?
+                            """, (name, role, p_id))
                         
                         # Insert Squad
                         cursor.execute("""

@@ -90,6 +90,14 @@ def scrape_awards():
                 
             soup = BeautifulSoup(r.text, "html.parser")
             
+            # Extract match name from h1 tag
+            match_name = ""
+            h1_tag = soup.find("h1")
+            if h1_tag:
+                match_name = h1_tag.get_text().strip()
+                for suffix in [" - Live Cricket Score", " Live Score", " - Scorecard"]:
+                    match_name = match_name.replace(suffix, "").strip()
+            
             link = get_player_of_the_match(soup)
             
             if link:
