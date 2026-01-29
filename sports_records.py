@@ -105,25 +105,39 @@ class SportsMatchScraper:
                 if any(team in txt.lower() for team in team_parts):
                     details["winner"] = txt
 
-        # 2. Fallback to Match Facts
-        if not details["venue"] or not details["winner"]:
-            facts_url = f"{self.BASE_URL}/cricket-match-facts/{match_id}/{slug}"
-            soup = self.fetch_page(facts_url)
-            if soup:
-                if not details["venue"]:
-                    venue_el = soup.select_one('a[href*="/venues/"]') or soup.select_one('a[href*="/cricket-grounds/"]')
-                    if venue_el:
-                        details["venue"] = self.clean_text(venue_el.get_text())
-                
-                if not details["winner"]:
-                    # Look specifically for the result banner in match facts
-                    # Re-trying patterns that are likely to be specific to this match
-                    # Often in a cb-toss-sts class or similar
-                    candidate = soup.find(string=re.compile(r"won by|Match tied|No result", re.I))
-                    if candidate:
-                        res_text = self.clean_text(candidate.parent.get_text())
-                        if any(team in res_text.lower() for team in team_parts):
-                            details["winner"] = res_text
+        # 2. Match Facts (Venue, Winner fallback, and Officials)
+        facts_url = f"{self.BASE_URL}/cricket-match-facts/{match_id}/{slug}"
+        soup = self.fetch_page(facts_url)
+        if soup:
+            if not details["venue"]:
+                venue_el = soup.select_one('a[href*="/venues/"]') or soup.select_one('a[href*="/cricket-grounds/"]')
+                if venue_el:
+                    details["venue"] = self.clean_text(venue_el.get_text())
+            
+            if not details["winner"]:
+                candidate = soup.find(string=re.compile(r"won by|Match tied|No result", re.I))
+                if candidate:
+                    res_text = self.clean_text(candidate.parent.get_text())
+                    if any(team in res_text.lower() for team in team_parts):
+                        details["winner"] = res_text
+
+            # --- Extract Officials ---
+            details.update({"umpire_1": None, "umpire_2": None, "tv_umpire": None, "match_referee": None})
+            # Try multiple selectors as Cricbuzz uses different layouts
+            info_rows = soup.select(".cb-mtch-info-itm, .facts-row-grid, .cb-col-100.cb-col")
+            
+            for row in info_rows:
+                txt = row.get_text(separator=" ", strip=True)
+                if txt.startswith("Umpires"):
+                    # Clean label and split names
+                    val = re.sub(r"^Umpires:?\s*", "", txt).strip()
+                    names = [n.strip() for n in val.split(",") if n.strip()]
+                    if len(names) >= 1: details["umpire_1"] = names[0]
+                    if len(names) >= 2: details["umpire_2"] = names[1]
+                elif txt.startswith("3rd Umpire"):
+                    details["tv_umpire"] = re.sub(r"^3rd Umpire:?\s*", "", txt).strip()
+                elif txt.startswith("Referee"):
+                    details["match_referee"] = re.sub(r"^Referee:?\s*", "", txt).strip()
 
         return details
 
@@ -167,7 +181,13 @@ class SportsMatchScraper:
                 "match_name": details["match_name"] or teams,
                 "format": details["format"],
                 "winner": details["winner"],
-                "venue": details["venue"] or "Unknown"
+                "venue": details["venue"] or "Unknown",
+                "officials": {
+                    "umpire_1": details.get("umpire_1"),
+                    "umpire_2": details.get("umpire_2"),
+                    "tv_umpire": details.get("tv_umpire"),
+                    "match_referee": details.get("match_referee")
+                }
             })
             
         return matches
@@ -203,14 +223,36 @@ class SportsMatchRecords:
                     venue TEXT
                 )
             """)
+            
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS match_officials (
+                    match_id TEXT PRIMARY KEY,
+                    umpire_1 TEXT,
+                    umpire_2 TEXT,
+                    tv_umpire TEXT,
+                    match_referee TEXT,
+                    FOREIGN KEY (match_id) REFERENCES sports_match_records(match_id)
+                )
+            """)
 
     def save_matches(self, matches: List[Dict]):
         with self._get_conn() as conn:
-            conn.execute("DELETE FROM sports_match_records") # Fresh start
-            conn.executemany("""
-                INSERT INTO sports_match_records (match_id, teams, match_name, format, winner, venue)
-                VALUES (:match_id, :teams, :match_name, :format, :winner, :venue)
-            """, matches)
+            conn.execute("DELETE FROM sports_match_records")
+            conn.execute("DELETE FROM match_officials")
+            
+            for m in matches:
+                # Store match metadata
+                conn.execute("""
+                    INSERT INTO sports_match_records (match_id, teams, match_name, format, winner, venue)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                """, (m['match_id'], m['teams'], m['match_name'], m['format'], m['winner'], m['venue']))
+                
+                # Store officials
+                off = m['officials']
+                conn.execute("""
+                    INSERT INTO match_officials (match_id, umpire_1, umpire_2, tv_umpire, match_referee)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (m['match_id'], off['umpire_1'], off['umpire_2'], off['tv_umpire'], off['match_referee']))
 
     def display(self):
         with self._get_conn() as conn:

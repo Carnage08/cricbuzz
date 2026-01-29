@@ -41,6 +41,7 @@ erDiagram
     SPORTS_MATCH_RECORDS ||--o{ BATTER_SCORECARD : "has"
     SPORTS_MATCH_RECORDS ||--o{ BOWLER_SCORECARD : "has"
     SPORTS_MATCH_RECORDS ||--o{ MATCH_AWARDS : "has"
+    SPORTS_MATCH_RECORDS ||--|| MATCH_OFFICIALS : "has"
     SPORTS_MATCH_RECORDS ||--o{ MATCH_SQUAD_MAPPING : "has"
     PLAYERS ||--o{ MATCH_SQUAD_MAPPING : "belongs to"
     PLAYERS ||--o{ BATTER_SCORECARD : "records"
@@ -98,6 +99,14 @@ erDiagram
         int player_id FK
         string player_name
         string award_name
+    }
+
+    MATCH_OFFICIALS {
+        string match_id PK, FK
+        string umpire_1
+        string umpire_2
+        string tv_umpire
+        string match_referee
     }
 ```
 
