@@ -56,7 +56,7 @@ def init_db():
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS match_squads (
         squad_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        match_id TEXT NOT NULL,
+        match_id INTEGER NOT NULL,
         player_id INTEGER NOT NULL,
         team TEXT NOT NULL,
         FOREIGN KEY (match_id) REFERENCES sports_match_records(match_id),
@@ -266,7 +266,7 @@ def scrape_squads():
                         cursor.execute("""
                             INSERT OR IGNORE INTO match_squads (match_id, player_id, team)
                             VALUES (?, ?, ?)
-                        """, (str(match_id), p_id, team_name))
+                        """, (match_id, p_id, team_name))
                         count += 1
                 return count
 

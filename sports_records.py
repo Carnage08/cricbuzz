@@ -176,7 +176,7 @@ class SportsMatchScraper:
                 continue
             
             matches.append({
-                "match_id": match_id,
+                "match_id": int(match_id),
                 "teams": teams,
                 "match_name": details["match_name"] or teams,
                 "format": details["format"],
@@ -215,7 +215,7 @@ class SportsMatchRecords:
         with self._get_conn() as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS sports_match_records (
-                    match_id TEXT PRIMARY KEY,
+                    match_id INTEGER PRIMARY KEY,
                     teams TEXT NOT NULL,
                     match_name TEXT,
                     format TEXT,
@@ -226,7 +226,7 @@ class SportsMatchRecords:
             
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS match_officials (
-                    match_id TEXT PRIMARY KEY,
+                    match_id INTEGER PRIMARY KEY,
                     umpire_1 TEXT,
                     umpire_2 TEXT,
                     tv_umpire TEXT,

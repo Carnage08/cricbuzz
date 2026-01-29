@@ -21,7 +21,7 @@ def init_db():
     # to avoid issues if the referenced match/player doesn't exist in our partial DB
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS match_awards (
-        match_id TEXT,
+        match_id INTEGER,
         player_id INTEGER,
         player_name TEXT,
         award_name TEXT DEFAULT 'Player of the Match'
@@ -115,12 +115,12 @@ def scrape_awards():
                     cursor.execute("""
                         DELETE FROM match_awards 
                         WHERE match_id=? AND award_name='Player of the Match'
-                    """, (str(match_id),))
+                    """, (match_id,))
                     
                     cursor.execute("""
                         INSERT INTO match_awards (match_id, player_id, player_name)
                         VALUES (?, ?, ?)
-                    """, (str(match_id), p_id, p_name))
+                    """, (match_id, p_id, p_name))
                     
                     conn.commit()
                 else:

@@ -18,7 +18,7 @@ def init_db():
     # Batter Scorecard Table
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS batter_scorecard (
-        match_id TEXT,
+        match_id INTEGER,
         player_id INTEGER,
         player_name TEXT,
         dismissal TEXT,
@@ -36,7 +36,7 @@ def init_db():
     # Using 'WB' for wides as requested
     cursor.execute("""
     CREATE TABLE IF NOT EXISTS bowler_scorecard (
-        match_id TEXT,
+        match_id INTEGER,
         player_id INTEGER,
         player_name TEXT,
         O REAL,
@@ -91,8 +91,8 @@ def scrape_scorecards():
             soup = BeautifulSoup(r.text, "html.parser")
             
             # Clear existing data
-            cursor.execute("DELETE FROM batter_scorecard WHERE match_id=?", (str(match_id),))
-            cursor.execute("DELETE FROM bowler_scorecard WHERE match_id=?", (str(match_id),))
+            cursor.execute("DELETE FROM batter_scorecard WHERE match_id=?", (match_id,))
+            cursor.execute("DELETE FROM bowler_scorecard WHERE match_id=?", (match_id,))
             
             # Extract match name from h1 tag
             match_name = ""
@@ -158,7 +158,7 @@ def scrape_scorecards():
                 cursor.execute("""
                     INSERT INTO batter_scorecard (match_id, player_id, player_name, dismissal, R, B, fours, sixes, SR)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (str(match_id), p_id, p_name, dismissal, r_val, b_val, fours, sixes, sr))
+                """, (match_id, p_id, p_name, dismissal, r_val, b_val, fours, sixes, sr))
                 bat_count += 1
 
             # --- BOWLING ---
@@ -211,7 +211,7 @@ def scrape_scorecards():
                 cursor.execute("""
                     INSERT INTO bowler_scorecard (match_id, player_id, player_name, O, M, R, W, NB, WB, ECO)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """, (str(match_id), p_id, p_name, o_val, m_val, r_val, w_val, nb_val, wd_val, eco_val))
+                """, (match_id, p_id, p_name, o_val, m_val, r_val, w_val, nb_val, wd_val, eco_val))
                 bowl_count += 1
             
             conn.commit()
